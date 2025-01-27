@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KQL Query Runner</title>
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
-    <!-- Added pako library for GZIP compression -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
         body {
@@ -90,7 +89,6 @@
     <div class="container">
         <h1>KQL Query Runner</h1>
         
-        <!-- Authentication Section -->
         <div id="authSection" class="section">
             <button id="signInButton">Sign in with Azure</button>
             <div id="userInfo" class="hidden">
@@ -99,7 +97,6 @@
             </div>
         </div>
 
-        <!-- Workspace Selection Section -->
         <div id="workspaceSection" class="section hidden">
             <h2>Select Workspace</h2>
             <select id="subscriptionSelector">
@@ -110,7 +107,6 @@
             </select>
         </div>
         
-        <!-- Query Selection Section -->
         <div id="querySection" class="section hidden">
             <h2>Select Query</h2>
             <select id="querySelector">
@@ -128,7 +124,6 @@
     </div>
 
     <script>
-        // Azure AD App Registration configuration
         const msalConfig = {
             auth: {
                 clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905",
@@ -141,14 +136,10 @@
             scopes: ["https://management.azure.com/user_impersonation"]
         };
 
-        // Initialize MSAL
         const msalInstance = new msal.PublicClientApplication(msalConfig);
-
-        // GitHub repository configuration
         const GITHUB_REPO = 'EEN421/KQL-Queries';
         const GITHUB_API_BASE = 'https://api.github.com';
 
-        // DOM elements
         const signInButton = document.getElementById('signInButton');
         const signOutButton = document.getElementById('signOutButton');
         const userInfo = document.getElementById('userInfo');
@@ -163,10 +154,32 @@
         const loadingDiv = document.getElementById('loading');
         const errorDiv = document.getElementById('error');
 
-        // Store queries content
         const queriesCache = new Map();
 
-        // Authentication event listeners
+        async function compressAndEncodeQuery(query) {
+            try {
+                // Convert query to UTF-8 bytes
+                const encoder = new TextEncoder();
+                const queryBytes = encoder.encode(query);
+
+                // Compress using pako (GZIP)
+                const compressedData = pako.gzip(queryBytes);
+
+                // Convert to base64
+                let encodedText = btoa(String.fromCharCode.apply(null, compressedData));
+
+                // URL encode specific characters as per C# example
+                encodedText = encodedText.replace(/\//g, "%2F")
+                                      .replace(/\+/g, "%2B")
+                                      .replace(/=/g, "%3D");
+
+                return encodedText;
+            } catch (error) {
+                console.error('Error compressing query:', error);
+                throw error;
+            }
+        }
+
         signInButton.addEventListener('click', () => {
             msalInstance.loginRedirect(loginRequest)
                 .catch(error => {
@@ -183,7 +196,6 @@
                 });
         });
 
-        // Handle the redirect promise
         msalInstance.handleRedirectPromise()
             .then(response => {
                 if (response) {
@@ -200,7 +212,6 @@
                 showError(`Authentication error: ${error.message}`);
             });
 
-        // Authentication response handler
         function handleResponse(response) {
             if (response && (response.account || response.accountId)) {
                 const account = response.account || msalInstance.getAccountByHomeId(response.accountId);
@@ -212,7 +223,6 @@
             }
         }
 
-        // Load Azure subscriptions
         async function loadSubscriptions() {
             try {
                 const token = await getAccessToken();
@@ -233,7 +243,6 @@
             }
         }
 
-        // Get access token
         async function getAccessToken() {
             try {
                 const account = msalInstance.getAllAccounts()[0];
@@ -251,7 +260,6 @@
             }
         }
 
-        // Load workspaces when subscription is selected
         subscriptionSelector.addEventListener('change', async () => {
             const subscriptionId = subscriptionSelector.value;
             if (!subscriptionId) return;
@@ -279,7 +287,6 @@
             }
         });
 
-        // Enable query section when workspace is selected
         workspaceSelector.addEventListener('change', () => {
             if (workspaceSelector.value) {
                 querySection.classList.remove('hidden');
@@ -287,7 +294,6 @@
             }
         });
 
-        // Fetch list of .kql files from GitHub
         async function fetchQueryList() {
             loadingDiv.style.display = 'block';
             errorDiv.style.display = 'none';
@@ -314,7 +320,6 @@
             }
         }
 
-        // Fetch query content
         async function fetchQueryContent(fileName, downloadUrl) {
             if (queriesCache.has(fileName)) {
                 return queriesCache.get(fileName);
@@ -338,28 +343,6 @@
             }
         }
 
-        // New function to compress and encode query
-        async function compressAndEncodeQuery(queryString) {
-            try {
-                // Convert string to UTF-8 bytes
-                const encoder = new TextEncoder();
-                const bytes = encoder.encode(queryString);
-                
-                // Compress using pako (GZIP)
-                const compressed = pako.gzip(bytes);
-                
-                // Convert to base64
-                const base64 = btoa(String.fromCharCode.apply(null, compressed));
-                
-                // Make URL safe
-                return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            } catch (error) {
-                console.error('Error compressing query:', error);
-                throw error;
-            }
-        }
-
-        // Update query preview
         querySelector.addEventListener('change', async () => {
             const selectedOption = querySelector.selectedOptions[0];
             if (selectedOption && selectedOption.value) {
@@ -375,7 +358,6 @@
             }
         });
 
-        // Updated run button click handler with new URL format
         runButton.addEventListener('click', async () => {
             const selectedOption = querySelector.selectedOptions[0];
             if (!selectedOption || !selectedOption.value) {
@@ -388,17 +370,17 @@
                 if (!content) return;
 
                 const subscriptionId = subscriptionSelector.value;
-                const workspaceId = workspaceSelector.value;
-                const workspaceName = workspaceSelector.selectedOptions[0].textContent;
                 const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
+                const workspaceName = workspaceSelector.selectedOptions[0].textContent;
 
                 // Compress and encode the query
-                const base64EncodedQuery = await compressAndEncodeQuery(content);
+                const encodedQuery = await compressAndEncodeQuery(content);
 
-                // Construct the new Analytics blade URL format
-                const analyticsUrl = 'https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/resources/resourceId/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.operationalinsights/workspaces/${workspaceName}/query/${base64EncodedQuery}/isQueryBase64Compressed/true';
+                // Construct URL using the new format
+                const url = "https://portal.azure.com/#blade/" + 
+                    `Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F${subscriptionId}%2FresourceGroups%2F${resourceGroup}%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2F${workspaceName}/source/LogsBlade.AnalyticsShareLinkToQuery/query/${encodedQuery}/isQueryBase64Compressed/true`;
 
-                window.open(analyticsUrl, '_blank');
+                window.open(url, '_blank');
             } catch (error) {
                 showError('Error preparing query URL: ' + error.message);
             }
