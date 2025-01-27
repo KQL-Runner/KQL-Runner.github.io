@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KQL Query Runner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-msal-browser/3.1.0/msal-browser.min.js"></script>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -138,6 +138,17 @@
     </div>
 
     <script>
+        // Check if MSAL loaded properly
+        window.onload = function() {
+            if (typeof msal === 'undefined') {
+                console.error('MSAL failed to load');
+                document.getElementById('error').textContent = 'Authentication library failed to load. Please check your connection and refresh the page.';
+                document.getElementById('error').style.display = 'block';
+                return;
+            }
+            console.log('MSAL loaded successfully');
+        }
+
         // Azure AD App Registration details
         const msalConfig = {
             auth: {
@@ -185,11 +196,18 @@
         // Handle sign in
         signInButton.addEventListener('click', async () => {
             try {
+                console.log('Sign in button clicked');
+                console.log('MSAL Config:', msalConfig);
                 const response = await msalInstance.loginPopup(loginRequest);
+                console.log('Login response:', response);
                 handleResponse(response);
             } catch (error) {
-                console.error(error);
+                console.error('Sign in error:', error);
                 showError('Sign in failed: ' + error.message);
+                // Display more detailed error information
+                if (error.errorCode) {
+                    showError(`Error code: ${error.errorCode}\nError message: ${error.errorMessage}`);
+                }
             }
         });
 
