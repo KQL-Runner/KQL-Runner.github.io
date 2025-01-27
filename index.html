@@ -373,10 +373,14 @@
             const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
             const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
 
-            // Updated URL format targeting the Logs blade directly
+            // Correct URL format targeting the Logs blade directly
             const portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${encodedWorkspaceId}/query/${encodedQuery}`;
             
-            window.open(portalUrl, '_blank');
+            try {
+                window.open(portalUrl, '_blank');
+            } catch (err) {
+                showError('Failed to open Azure Portal: ' + err.message);
+            }
         });
 
         function showError(message) {
