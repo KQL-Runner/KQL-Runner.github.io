@@ -378,7 +378,7 @@
 
                 // Construct URL using the new format
                 const url = "https://portal.azure.com/#blade/" + 
-                    `Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F${subscriptionId}%2FresourceGroups%2F${resourceGroup}%2Fproviders%2Fmicrosoft.insights%2Fcomponents%2F${workspaceName}/source/LogsBlade.AnalyticsShareLinkToQuery/query/${encodedQuery}/isQueryBase64Compressed/true`;
+                    `Microsoft_Azure_Monitoring_Logs/LogsBlade/resourceId/%2Fsubscriptions%2F${subscriptionId}%2FresourceGroups%2F${resourceGroup}%2Fproviders%2Fmicrosoft.operationalinsights%2Fworkspaces%2F${workspaceName}/source/LogsBlade.AnalyticsShareLinkToQuery/query/${encodedQuery}/isQueryBase64Compressed/true`;
 
                 window.open(url, '_blank');
             } catch (error) {
