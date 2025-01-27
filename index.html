@@ -372,7 +372,7 @@
             const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
 
             // Updated Sentinel hunting URL format
-            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/Hunter/analysisId//timeRange/{"from":"2025-01-26T00:00:00.000Z","to":"2025-01-26T23:59:59.999Z"}/query/${encodedQuery}/workspaceResourceIds/["${encodedWorkspaceId}"]`;
+            const portalUrl = `https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/Hunting/view/query/${encodedQuery}/timeRange/P1D/workspaceId/${workspaceId}`;
             
             window.open(portalUrl, '_blank');
         });
