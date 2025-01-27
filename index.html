@@ -373,8 +373,8 @@
             const sentinelPath = `/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.securityinsightsarg/sentinel/${workspaceName}`;
             const encodedPath = encodeURIComponent(sentinelPath);
 
-            // Updated Sentinel URL format using MainMenuBlade and query parameters
-            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Hunting/id/${encodedPath}/initialQuery/${encodedQuery}`;
+            // Updated Sentinel URL format using MainMenuBlade and targeting Logs
+            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Logs/id/${encodedPath}/queryText/${encodedQuery}`;
             
             window.open(portalUrl, '_blank');
         });
