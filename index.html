@@ -396,7 +396,7 @@
                 const base64EncodedQuery = await compressAndEncodeQuery(content);
 
                 // Construct the new Analytics blade URL format
-                const analyticsUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/resources/resourceId/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.operationalinsights/workspaces/${workspaceName}/query/${base64EncodedQuery}`;
+                const analyticsUrl = 'https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/resources/resourceId/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.operationalinsights/workspaces/${workspaceName}/query/${base64EncodedQuery}/isQueryBase64Compressed/true';
 
                 window.open(analyticsUrl, '_blank');
             } catch (error) {
