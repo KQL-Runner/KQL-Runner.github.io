@@ -362,9 +362,17 @@
             const content = await fetchQueryContent(selectedOption.value, selectedOption.dataset.downloadUrl);
             if (!content) return;
 
+            const subscriptionId = subscriptionSelector.value;
             const workspaceId = workspaceSelector.value;
+            const workspaceName = workspaceSelector.selectedOptions[0].textContent;
             const encodedQuery = encodeURIComponent(content);
-            const portalUrl = `https://portal.azure.com/#@/sentinel/hunting?query=${encodedQuery}/workspaceId/${workspaceId}`;
+
+            // Construct the full workspace resource ID
+            const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${workspaceSelector.selectedOptions[0].dataset.resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
+            const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
+
+            // Updated Sentinel hunting URL format
+            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/Hunter/analysisId//timeRange/{"from":"2025-01-26T00:00:00.000Z","to":"2025-01-26T23:59:59.999Z"}/query/${encodedQuery}/workspaceResourceIds/["${encodedWorkspaceId}"]`;
             
             window.open(portalUrl, '_blank');
         });
