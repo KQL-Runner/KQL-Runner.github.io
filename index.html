@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KQL Query Runner</title>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0078d4;
+            margin-bottom: 1.5rem;
+        }
+        .section {
+            margin-bottom: 2rem;
+        }
+        select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .query-preview {
+            background-color: #f8f8f8;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #106ebe;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            margin: 1rem 0;
+            color: #666;
+        }
+        .error {
+            color: #d83b01;
+            margin: 1rem 0;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        #userInfo {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #f0f8ff;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>KQL Query Runner</h1>
+        
+        <!-- Authentication Section -->
+        <div id="authSection" class="section">
+            <button id="signInButton">Sign in with Azure</button>
+            <div id="userInfo" class="hidden">
+                Signed in as: <span id="userName"></span>
+                <button id="signOutButton">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Workspace Selection Section -->
+        <div id="workspaceSection" class="section hidden">
+            <h2>Select Workspace</h2>
+            <select id="subscriptionSelector">
+                <option value="">Select a subscription...</option>
+            </select>
+            <select id="workspaceSelector" disabled>
+                <option value="">Select a workspace...</option>
+            </select>
+        </div>
+        
+        <!-- Query Selection Section -->
+        <div id="querySection" class="section hidden">
+            <h2>Select Query</h2>
+            <select id="querySelector">
+                <option value="">Select a query...</option>
+            </select>
+            
+            <div class="query-preview" id="queryPreview">
+                Select a query to preview its contents...
+            </div>
+            <button id="runButton" disabled>Run in Sentinel</button>
+        </div>
+        
+        <div id="loading" class="loading">Loading...</div>
+        <div id="error" class="error"></div>
+    </div>
+
+    <script>
+        // Azure AD App Registration configuration
+        const msalConfig = {
+            auth: {
+                clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905",
+                authority: "https://login.microsoftonline.com/common",
+                redirectUri: window.location.origin,
+            }
+        };
+
+        const loginRequest = {
+            scopes: ["https://management.azure.com/user_impersonation"]
+        };
+
+        // Initialize MSAL
+        const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+        // GitHub repository configuration
+        const GITHUB_REPO = 'EEN421/KQL-Queries';
+        const GITHUB_API_BASE = 'https://api.github.com';
+
+        // DOM elements
+        const signInButton = document.getElementById('signInButton');
+        const signOutButton = document.getElementById('signOutButton');
+        const userInfo = document.getElementById('userInfo');
+        const userName = document.getElementById('userName');
+        const workspaceSection = document.getElementById('workspaceSection');
+        const subscriptionSelector = document.getElementById('subscriptionSelector');
+        const workspaceSelector = document.getElementById('workspaceSelector');
+        const querySection = document.getElementById('querySection');
+        const querySelector = document.getElementById('querySelector');
+        const queryPreview = document.getElementById('queryPreview');
+        const runButton = document.getElementById('runButton');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // Store queries content
+        const queriesCache = new Map();
+
+        // Authentication event listeners
+        signInButton.addEventListener('click', () => {
+            msalInstance.loginRedirect(loginRequest)
+                .catch(error => {
+                    console.error('Login error:', error);
+                    showError(`Sign in failed: ${error.message}`);
+                });
+        });
+
+        signOutButton.addEventListener('click', () => {
+            msalInstance.logoutRedirect()
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    showError(`Sign out failed: ${error.message}`);
+                });
+        });
+
+        // Handle the redirect promise
+        msalInstance.handleRedirectPromise()
+            .then(response => {
+                if (response) {
+                    handleResponse(response);
+                } else {
+                    const accounts = msalInstance.getAllAccounts();
+                    if (accounts.length > 0) {
+                        handleResponse({ account: accounts[0] });
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error handling redirect:', error);
+                showError(`Authentication error: ${error.message}`);
+            });
+
+        // Authentication response handler
+        function handleResponse(response) {
+            if (response && (response.account || response.accountId)) {
+                const account = response.account || msalInstance.getAccountByHomeId(response.accountId);
+                userName.textContent = account.username;
+                userInfo.classList.remove('hidden');
+                signInButton.classList.add('hidden');
+                workspaceSection.classList.remove('hidden');
+                loadSubscriptions();
+            }
+        }
+
+        // Load Azure subscriptions
+        async function loadSubscriptions() {
+            try {
+                const token = await getAccessToken();
+                const response = await fetch('https://management.azure.com/subscriptions?api-version=2020-01-01', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                
+                subscriptionSelector.innerHTML = '<option value="">Select a subscription...</option>';
+                data.value.forEach(sub => {
+                    const option = document.createElement('option');
+                    option.value = sub.subscriptionId;
+                    option.textContent = sub.displayName;
+                    subscriptionSelector.appendChild(option);
+                });
+            } catch (error) {
+                showError('Failed to load subscriptions: ' + error.message);
+            }
+        }
+
+        // Get access token
+        async function getAccessToken() {
+            try {
+                const account = msalInstance.getAllAccounts()[0];
+                const response = await msalInstance.acquireTokenSilent({
+                    ...loginRequest,
+                    account: account
+                });
+                return response.accessToken;
+            } catch (error) {
+                if (error instanceof msal.InteractionRequiredAuthError) {
+                    const response = await msalInstance.acquireTokenRedirect(loginRequest);
+                    return response.accessToken;
+                }
+                throw error;
+            }
+        }
+
+        // Load workspaces when subscription is selected
+        subscriptionSelector.addEventListener('change', async () => {
+            const subscriptionId = subscriptionSelector.value;
+            if (!subscriptionId) return;
+            
+            try {
+                const token = await getAccessToken();
+                const response = await fetch(
+                    `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.OperationalInsights/workspaces?api-version=2020-08-01`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                const data = await response.json();
+                
+                workspaceSelector.innerHTML = '<option value="">Select a workspace...</option>';
+                data.value.forEach(workspace => {
+                    const option = document.createElement('option');
+                    option.value = workspace.properties.customerId;
+                    option.textContent = workspace.name;
+                    option.dataset.resourceGroup = workspace.id.split('/')[4].toLowerCase();
+                    workspaceSelector.appendChild(option);
+                });
+                
+                workspaceSelector.disabled = false;
+            } catch (error) {
+                showError('Failed to load workspaces: ' + error.message);
+            }
+        });
+
+        // Enable query section when workspace is selected
+        workspaceSelector.addEventListener('change', () => {
+            if (workspaceSelector.value) {
+                querySection.classList.remove('hidden');
+                fetchQueryList();
+            }
+        });
+
+        // Fetch list of .kql files from GitHub
+        async function fetchQueryList() {
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${GITHUB_API_BASE}/repos/${GITHUB_REPO}/contents/`);
+                if (!response.ok) throw new Error('Failed to fetch repository contents');
+                
+                const files = await response.json();
+                const kqlFiles = files.filter(file => file.name.endsWith('.kql'));
+                
+                querySelector.innerHTML = '<option value="">Select a query...</option>';
+                kqlFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.name;
+                    option.textContent = file.name;
+                    option.dataset.downloadUrl = file.download_url;
+                    querySelector.appendChild(option);
+                });
+            } catch (error) {
+                showError('Error loading queries: ' + error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Fetch query content
+        async function fetchQueryContent(fileName, downloadUrl) {
+            if (queriesCache.has(fileName)) {
+                return queriesCache.get(fileName);
+            }
+
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(downloadUrl);
+                if (!response.ok) throw new Error('Failed to fetch query content');
+                
+                const content = await response.text();
+                queriesCache.set(fileName, content);
+                return content;
+            } catch (error) {
+                showError('Error loading query content: ' + error.message);
+                return null;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Update query preview
+        querySelector.addEventListener('change', async () => {
+            const selectedOption = querySelector.selectedOptions[0];
+            if (selectedOption && selectedOption.value) {
+                const downloadUrl = selectedOption.dataset.downloadUrl;
+                const content = await fetchQueryContent(selectedOption.value, downloadUrl);
+                if (content) {
+                    queryPreview.textContent = content;
+                    runButton.disabled = false;
+                }
+            } else {
+                queryPreview.textContent = 'Select a query to preview its contents...';
+                runButton.disabled = true;
+            }
+        });
+
+        // Handle run button click
+        runButton.addEventListener('click', async () => {
+            const selectedOption = querySelector.selectedOptions[0];
+            if (!selectedOption || !selectedOption.value) {
+                showError('Please select a query first.');
+                return;
+            }
+
+            const content = await fetchQueryContent(selectedOption.value, selectedOption.dataset.downloadUrl);
+            if (!content) return;
+
+            const subscriptionId = subscriptionSelector.value;
+            const workspaceId = workspaceSelector.value;
+            const workspaceName = workspaceSelector.selectedOptions[0].textContent;
+            const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
+            const encodedQuery = encodeURIComponent(content);
+
+            // Construct the Sentinel resource path
+            const sentinelPath = `/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.securityinsightsarg/sentinel/${workspaceName}`;
+            const encodedPath = encodeURIComponent(sentinelPath);
+
+            // Updated Sentinel URL format using MainMenuBlade and query parameters
+            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Hunting/id/${encodedPath}/initialQuery/${encodedQuery}`;
+            
+            window.open(portalUrl, '_blank');
+        });
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
