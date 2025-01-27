@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KQL Query Runner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-msal-browser/3.1.0/msal-browser.min.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -18,14 +19,14 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        h1 {
+        h1, h2 {
             color: #0078d4;
             margin-bottom: 1.5rem;
         }
-        .query-section {
+        .section {
             margin-bottom: 2rem;
         }
-        select {
+        select, input {
             width: 100%;
             padding: 0.5rem;
             margin-bottom: 1rem;
@@ -45,9 +46,6 @@
             max-height: 400px;
             overflow-y: auto;
         }
-        .portal-selector {
-            margin-bottom: 1rem;
-        }
         button {
             background-color: #0078d4;
             color: white;
@@ -57,6 +55,7 @@
             cursor: pointer;
             font-size: 1rem;
             transition: background-color 0.2s;
+            margin-right: 1rem;
         }
         button:hover {
             background-color: #106ebe;
@@ -75,14 +74,47 @@
             margin: 1rem 0;
             display: none;
         }
+        .hidden {
+            display: none;
+        }
+        #userInfo {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #f0f8ff;
+            border-radius: 4px;
+        }
+        #subscriptionSelector, #workspaceSelector {
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>KQL Query Runner</h1>
         
-        <div class="query-section">
-            <h2>Select a Query</h2>
+        <!-- Authentication Section -->
+        <div id="authSection" class="section">
+            <button id="signInButton">Sign in with Azure</button>
+            <div id="userInfo" class="hidden">
+                Signed in as: <span id="userName"></span>
+                <button id="signOutButton">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Workspace Selection Section -->
+        <div id="workspaceSection" class="section hidden">
+            <h2>Select Workspace</h2>
+            <select id="subscriptionSelector">
+                <option value="">Select a subscription...</option>
+            </select>
+            <select id="workspaceSelector" disabled>
+                <option value="">Select a workspace...</option>
+            </select>
+        </div>
+
+        <!-- Query Selection Section -->
+        <div id="querySection" class="section hidden">
+            <h2>Select Query</h2>
             <select id="querySelector">
                 <option value="">Select a query...</option>
             </select>
@@ -92,32 +124,56 @@
             </div>
         </div>
 
-        <div class="portal-selector">
+        <div class="portal-selector hidden" id="portalSection">
             <h2>Select Portal</h2>
             <select id="portalSelector">
                 <option value="loganalytics">Log Analytics</option>
                 <option value="sentinel">Microsoft Sentinel</option>
             </select>
+            <button id="runButton" disabled>Run in Portal</button>
         </div>
-
-        <button id="runButton" disabled>Run in Portal</button>
         
-        <div id="loading" class="loading">Loading queries...</div>
+        <div id="loading" class="loading">Loading...</div>
         <div id="error" class="error"></div>
     </div>
 
     <script>
+        // Azure AD App Registration details
+        const msalConfig = {
+            auth: {
+                clientId: "YOUR_CLIENT_ID", // Replace with your Azure AD App Registration Client ID
+                authority: "https://login.microsoftonline.com/common",
+                redirectUri: window.location.origin,
+            }
+        };
+
+        const msalInstance = new msal.PublicClientApplication(msalConfig);
         const GITHUB_REPO = 'EEN421/KQL-Queries';
         const GITHUB_API_BASE = 'https://api.github.com';
         
-        const portalUrls = {
-            loganalytics: 'https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/',
-            sentinel: 'https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade/7/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/'
+        // Required API permissions
+        const loginRequest = {
+            scopes: [
+                "https://management.azure.com/user_impersonation",
+                "openid",
+                "profile",
+                "email",
+                "User.Read"
+            ]
         };
 
         // DOM elements
+        const signInButton = document.getElementById('signInButton');
+        const signOutButton = document.getElementById('signOutButton');
+        const userInfo = document.getElementById('userInfo');
+        const userName = document.getElementById('userName');
+        const workspaceSection = document.getElementById('workspaceSection');
+        const subscriptionSelector = document.getElementById('subscriptionSelector');
+        const workspaceSelector = document.getElementById('workspaceSelector');
+        const querySection = document.getElementById('querySection');
         const querySelector = document.getElementById('querySelector');
         const queryPreview = document.getElementById('queryPreview');
+        const portalSection = document.getElementById('portalSection');
         const portalSelector = document.getElementById('portalSelector');
         const runButton = document.getElementById('runButton');
         const loadingDiv = document.getElementById('loading');
@@ -125,6 +181,104 @@
 
         // Store queries content
         const queriesCache = new Map();
+
+        // Handle sign in
+        signInButton.addEventListener('click', async () => {
+            try {
+                const response = await msalInstance.loginPopup(loginRequest);
+                handleResponse(response);
+            } catch (error) {
+                console.error(error);
+                showError('Sign in failed: ' + error.message);
+            }
+        });
+
+        // Handle sign out
+        signOutButton.addEventListener('click', async () => {
+            try {
+                await msalInstance.logoutPopup();
+                resetUI();
+            } catch (error) {
+                console.error(error);
+                showError('Sign out failed: ' + error.message);
+            }
+        });
+
+        // Handle auth response
+        async function handleResponse(response) {
+            if (response !== null) {
+                userName.textContent = response.account.username;
+                userInfo.classList.remove('hidden');
+                signInButton.classList.add('hidden');
+                await loadSubscriptions(response.accessToken);
+                workspaceSection.classList.remove('hidden');
+            }
+        }
+
+        // Load subscriptions
+        async function loadSubscriptions(token) {
+            loadingDiv.style.display = 'block';
+            try {
+                const response = await fetch('https://management.azure.com/subscriptions?api-version=2020-01-01', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                
+                subscriptionSelector.innerHTML = '<option value="">Select a subscription...</option>';
+                data.value.forEach(sub => {
+                    const option = document.createElement('option');
+                    option.value = sub.subscriptionId;
+                    option.textContent = sub.displayName;
+                    subscriptionSelector.appendChild(option);
+                });
+                
+                workspaceSelector.disabled = false;
+            } catch (error) {
+                showError('Failed to load subscriptions: ' + error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Load workspaces for selected subscription
+        subscriptionSelector.addEventListener('change', async () => {
+            const token = await getAccessToken();
+            const subscriptionId = subscriptionSelector.value;
+            
+            if (!subscriptionId) return;
+            
+            loadingDiv.style.display = 'block';
+            try {
+                const response = await fetch(
+                    `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.OperationalInsights/workspaces?api-version=2020-08-01`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                const data = await response.json();
+                
+                workspaceSelector.innerHTML = '<option value="">Select a workspace...</option>';
+                data.value.forEach(workspace => {
+                    const option = document.createElement('option');
+                    option.value = workspace.properties.customerId;
+                    option.textContent = workspace.name;
+                    workspaceSelector.appendChild(option);
+                });
+                
+                workspaceSelector.disabled = false;
+            } catch (error) {
+                showError('Failed to load workspaces: ' + error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        });
+
+        // Enable query section when workspace is selected
+        workspaceSelector.addEventListener('change', () => {
+            if (workspaceSelector.value) {
+                querySection.classList.remove('hidden');
+                portalSection.classList.remove('hidden');
+                fetchQueryList();
+            }
+        });
 
         // Fetch list of .kql files from GitHub
         async function fetchQueryList() {
@@ -138,6 +292,7 @@
                 const files = await response.json();
                 const kqlFiles = files.filter(file => file.name.endsWith('.kql'));
                 
+                querySelector.innerHTML = '<option value="">Select a query...</option>';
                 kqlFiles.forEach(file => {
                     const option = document.createElement('option');
                     option.value = file.name;
@@ -146,8 +301,7 @@
                     querySelector.appendChild(option);
                 });
             } catch (error) {
-                errorDiv.textContent = `Error loading queries: ${error.message}`;
-                errorDiv.style.display = 'block';
+                showError('Error loading queries: ' + error.message);
             } finally {
                 loadingDiv.style.display = 'none';
             }
@@ -170,8 +324,7 @@
                 queriesCache.set(fileName, content);
                 return content;
             } catch (error) {
-                errorDiv.textContent = `Error loading query content: ${error.message}`;
-                errorDiv.style.display = 'block';
+                showError('Error loading query content: ' + error.message);
                 return null;
             } finally {
                 loadingDiv.style.display = 'none';
@@ -198,23 +351,59 @@
         runButton.addEventListener('click', async () => {
             const selectedOption = querySelector.selectedOptions[0];
             if (!selectedOption || !selectedOption.value) {
-                errorDiv.textContent = 'Please select a query first.';
-                errorDiv.style.display = 'block';
+                showError('Please select a query first.');
                 return;
             }
 
             const content = await fetchQueryContent(selectedOption.value, selectedOption.dataset.downloadUrl);
             if (!content) return;
 
+            const workspaceId = workspaceSelector.value;
             const selectedPortal = portalSelector.value;
             const encodedQuery = encodeURIComponent(content);
-            const portalUrl = portalUrls[selectedPortal];
             
-            window.open(`${portalUrl}?query=${encodedQuery}`, '_blank');
+            let portalUrl;
+            if (selectedPortal === 'loganalytics') {
+                portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${workspaceId}/query/${encodedQuery}`;
+            } else {
+                portalUrl = `https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade/7/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${workspaceId}/query/${encodedQuery}`;
+            }
+            
+            window.open(portalUrl, '_blank');
         });
 
-        // Initialize
-        fetchQueryList();
+        // Helper functions
+        async function getAccessToken() {
+            try {
+                const account = msalInstance.getAllAccounts()[0];
+                const response = await msalInstance.acquireTokenSilent({
+                    ...loginRequest,
+                    account: account
+                });
+                return response.accessToken;
+            } catch (error) {
+                console.error('Error getting token:', error);
+                throw error;
+            }
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function resetUI() {
+            userInfo.classList.add('hidden');
+            signInButton.classList.remove('hidden');
+            workspaceSection.classList.add('hidden');
+            querySection.classList.add('hidden');
+            portalSection.classList.add('hidden');
+            errorDiv.style.display = 'none';
+            userName.textContent = '';
+        }
+
+        // Check for existing sign-in
+        msalInstance.handleRedirectPromise().then(handleResponse).catch(console.error);
     </script>
 </body>
 </html>
