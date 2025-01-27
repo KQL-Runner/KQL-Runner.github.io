@@ -367,20 +367,18 @@
             const workspaceId = workspaceSelector.value;
             const workspaceName = workspaceSelector.selectedOptions[0].textContent;
             const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
-            const encodedQuery = encodeURIComponent(content);
 
-            // Construct the Log Analytics workspace resource ID
+            // Double encode special characters in the query
+            const doubleEncodedQuery = encodeURIComponent(encodeURIComponent(content));
+
+            // Construct and encode the resource ID
             const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
-            const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
+            const doubleEncodedResourceId = encodeURIComponent(encodeURIComponent(workspaceResourceId));
 
-            // Correct URL format targeting the Logs blade directly
-            const portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${encodedWorkspaceId}/query/${encodedQuery}`;
+            // Use exact Azure portal URL format
+            const portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${doubleEncodedResourceId}/query/${doubleEncodedQuery}`;
             
-            try {
-                window.open(portalUrl, '_blank');
-            } catch (err) {
-                showError('Failed to open Azure Portal: ' + err.message);
-            }
+            window.open(portalUrl, '_blank');
         });
 
         function showError(message) {
