@@ -152,7 +152,7 @@
         // Azure AD App Registration details
         const msalConfig = {
             auth: {
-                clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905", // <--Azure AD App Registration Client ID
+                clientId: "YOUR_CLIENT_ID", // Replace with your Azure AD App Registration Client ID
                 authority: "https://login.microsoftonline.com/common",
                 redirectUri: window.location.origin,
             }
@@ -194,21 +194,15 @@
         const queriesCache = new Map();
 
         // Handle sign in
-        signInButton.addEventListener('click', async () => {
-            try {
-                console.log('Sign in button clicked');
-                console.log('MSAL Config:', msalConfig);
-                const response = await msalInstance.loginPopup(loginRequest);
-                console.log('Login response:', response);
-                handleResponse(response);
-            } catch (error) {
-                console.error('Sign in error:', error);
-                showError('Sign in failed: ' + error.message);
-                // Display more detailed error information
-                if (error.errorCode) {
-                    showError(`Error code: ${error.errorCode}\nError message: ${error.errorMessage}`);
-                }
-            }
+        signInButton.addEventListener('click', () => {
+            msalInstance.loginRedirect(loginRequest)
+                .catch(error => {
+                    console.error('Sign in error:', error);
+                    showError('Sign in failed: ' + error.message);
+                    if (error.errorCode) {
+                        showError(`Error code: ${error.errorCode}\nError message: ${error.errorMessage}`);
+                    }
+                });
         });
 
         // Handle sign out
@@ -394,6 +388,11 @@
         async function getAccessToken() {
             try {
                 const account = msalInstance.getAllAccounts()[0];
+                if (!account) {
+                    // Redirect to login if no account is found
+                    msalInstance.loginRedirect(loginRequest);
+                    return null;
+                }
                 const response = await msalInstance.acquireTokenSilent({
                     ...loginRequest,
                     account: account
@@ -401,6 +400,12 @@
                 return response.accessToken;
             } catch (error) {
                 console.error('Error getting token:', error);
+                if (error instanceof msal.InteractionRequiredAuthError) {
+                    msalInstance.acquireTokenRedirect({
+                        ...loginRequest,
+                        account: msalInstance.getAllAccounts()[0]
+                    });
+                }
                 throw error;
             }
         }
@@ -420,8 +425,23 @@
             userName.textContent = '';
         }
 
-        // Check for existing sign-in
-        msalInstance.handleRedirectPromise().then(handleResponse).catch(console.error);
+        // Initialize MSAL and check for existing sign-in
+        msalInstance.handleRedirectPromise()
+            .then(response => {
+                if (response) {
+                    console.log('Redirect response:', response);
+                    handleResponse(response);
+                } else {
+                    const accounts = msalInstance.getAllAccounts();
+                    if (accounts.length > 0) {
+                        handleResponse({ account: accounts[0] });
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error during redirect handling:', error);
+                showError('Authentication error: ' + error.message);
+            });
     </script>
 </body>
 </html>
