@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KQL Query Runner</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0078d4;
+            margin-bottom: 1.5rem;
+        }
+        .query-section {
+            margin-bottom: 2rem;
+        }
+        select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .query-preview {
+            background-color: #f8f8f8;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .portal-selector {
+            margin-bottom: 1rem;
+        }
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #106ebe;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            margin: 1rem 0;
+            color: #666;
+        }
+        .error {
+            color: #d83b01;
+            margin: 1rem 0;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>KQL Query Runner</h1>
+        
+        <div class="query-section">
+            <h2>Select a Query</h2>
+            <select id="querySelector">
+                <option value="">Select a query...</option>
+            </select>
+            
+            <div class="query-preview" id="queryPreview">
+                Select a query to preview its contents...
+            </div>
+        </div>
+
+        <div class="portal-selector">
+            <h2>Select Portal</h2>
+            <select id="portalSelector">
+                <option value="loganalytics">Log Analytics</option>
+                <option value="sentinel">Microsoft Sentinel</option>
+            </select>
+        </div>
+
+        <button id="runButton" disabled>Run in Portal</button>
+        
+        <div id="loading" class="loading">Loading queries...</div>
+        <div id="error" class="error"></div>
+    </div>
+
+    <script>
+        const GITHUB_REPO = 'EEN421/KQL-Queries';
+        const GITHUB_API_BASE = 'https://api.github.com';
+        
+        const portalUrls = {
+            loganalytics: 'https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/',
+            sentinel: 'https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade/7/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/'
+        };
+
+        // DOM elements
+        const querySelector = document.getElementById('querySelector');
+        const queryPreview = document.getElementById('queryPreview');
+        const portalSelector = document.getElementById('portalSelector');
+        const runButton = document.getElementById('runButton');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+
+        // Store queries content
+        const queriesCache = new Map();
+
+        // Fetch list of .kql files from GitHub
+        async function fetchQueryList() {
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${GITHUB_API_BASE}/repos/${GITHUB_REPO}/contents/`);
+                if (!response.ok) throw new Error('Failed to fetch repository contents');
+                
+                const files = await response.json();
+                const kqlFiles = files.filter(file => file.name.endsWith('.kql'));
+                
+                kqlFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.name;
+                    option.textContent = file.name;
+                    option.dataset.downloadUrl = file.download_url;
+                    querySelector.appendChild(option);
+                });
+            } catch (error) {
+                errorDiv.textContent = `Error loading queries: ${error.message}`;
+                errorDiv.style.display = 'block';
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Fetch query content
+        async function fetchQueryContent(fileName, downloadUrl) {
+            if (queriesCache.has(fileName)) {
+                return queriesCache.get(fileName);
+            }
+
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(downloadUrl);
+                if (!response.ok) throw new Error('Failed to fetch query content');
+                
+                const content = await response.text();
+                queriesCache.set(fileName, content);
+                return content;
+            } catch (error) {
+                errorDiv.textContent = `Error loading query content: ${error.message}`;
+                errorDiv.style.display = 'block';
+                return null;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Update query preview
+        querySelector.addEventListener('change', async () => {
+            const selectedOption = querySelector.selectedOptions[0];
+            if (selectedOption && selectedOption.value) {
+                const downloadUrl = selectedOption.dataset.downloadUrl;
+                const content = await fetchQueryContent(selectedOption.value, downloadUrl);
+                if (content) {
+                    queryPreview.textContent = content;
+                    runButton.disabled = false;
+                }
+            } else {
+                queryPreview.textContent = 'Select a query to preview its contents...';
+                runButton.disabled = true;
+            }
+        });
+
+        // Handle run button click
+        runButton.addEventListener('click', async () => {
+            const selectedOption = querySelector.selectedOptions[0];
+            if (!selectedOption || !selectedOption.value) {
+                errorDiv.textContent = 'Please select a query first.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const content = await fetchQueryContent(selectedOption.value, selectedOption.dataset.downloadUrl);
+            if (!content) return;
+
+            const selectedPortal = portalSelector.value;
+            const encodedQuery = encodeURIComponent(content);
+            const portalUrl = portalUrls[selectedPortal];
+            
+            window.open(`${portalUrl}?query=${encodedQuery}`, '_blank');
+        });
+
+        // Initialize
+        fetchQueryList();
+    </script>
+</body>
+</html>
