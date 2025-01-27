@@ -6,7 +6,82 @@
     <title>KQL Query Runner</title>
     <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
     <style>
-        /* ... [Previous styles remain the same] ... */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0078d4;
+            margin-bottom: 1.5rem;
+        }
+        .section {
+            margin-bottom: 2rem;
+        }
+        select {
+            width: 100%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        .query-preview {
+            background-color: #f8f8f8;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            margin-bottom: 1rem;
+            font-family: monospace;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #106ebe;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            margin: 1rem 0;
+            color: #666;
+        }
+        .error {
+            color: #d83b01;
+            margin: 1rem 0;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        #userInfo {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: #f0f8ff;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -33,8 +108,9 @@
             </select>
         </div>
         
-        <div class="query-section hidden" id="querySection">
-            <h2>Select a Query</h2>
+        <!-- Query Selection Section -->
+        <div id="querySection" class="section hidden">
+            <h2>Select Query</h2>
             <select id="querySelector">
                 <option value="">Select a query...</option>
             </select>
@@ -42,9 +118,8 @@
             <div class="query-preview" id="queryPreview">
                 Select a query to preview its contents...
             </div>
+            <button id="runButton" disabled>Run in Sentinel</button>
         </div>
-
-        <button id="runButton" class="hidden" disabled>Run in Sentinel</button>
         
         <div id="loading" class="loading">Loading...</div>
         <div id="error" class="error"></div>
@@ -89,7 +164,7 @@
         // Store queries content
         const queriesCache = new Map();
 
-        // Handle sign in
+        // Authentication event listeners
         signInButton.addEventListener('click', () => {
             msalInstance.loginRedirect(loginRequest)
                 .catch(error => {
@@ -98,7 +173,6 @@
                 });
         });
 
-        // Handle sign out
         signOutButton.addEventListener('click', () => {
             msalInstance.logoutRedirect()
                 .catch(error => {
@@ -124,7 +198,7 @@
                 showError(`Authentication error: ${error.message}`);
             });
 
-        // Handle authentication response
+        // Authentication response handler
         function handleResponse(response) {
             if (response && (response.account || response.accountId)) {
                 const account = response.account || msalInstance.getAccountByHomeId(response.accountId);
@@ -136,7 +210,7 @@
             }
         }
 
-        // Load subscriptions
+        // Load Azure subscriptions
         async function loadSubscriptions() {
             try {
                 const token = await getAccessToken();
@@ -145,14 +219,13 @@
                 });
                 const data = await response.json();
                 
+                subscriptionSelector.innerHTML = '<option value="">Select a subscription...</option>';
                 data.value.forEach(sub => {
                     const option = document.createElement('option');
                     option.value = sub.subscriptionId;
                     option.textContent = sub.displayName;
                     subscriptionSelector.appendChild(option);
                 });
-                
-                workspaceSelector.disabled = false;
             } catch (error) {
                 showError('Failed to load subscriptions: ' + error.message);
             }
@@ -207,12 +280,76 @@
         workspaceSelector.addEventListener('change', () => {
             if (workspaceSelector.value) {
                 querySection.classList.remove('hidden');
-                runButton.classList.remove('hidden');
                 fetchQueryList();
             }
         });
 
-        // [Previous fetchQueryList, fetchQueryContent, and query preview functions remain the same]
+        // Fetch list of .kql files from GitHub
+        async function fetchQueryList() {
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch(`${GITHUB_API_BASE}/repos/${GITHUB_REPO}/contents/`);
+                if (!response.ok) throw new Error('Failed to fetch repository contents');
+                
+                const files = await response.json();
+                const kqlFiles = files.filter(file => file.name.endsWith('.kql'));
+                
+                querySelector.innerHTML = '<option value="">Select a query...</option>';
+                kqlFiles.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file.name;
+                    option.textContent = file.name;
+                    option.dataset.downloadUrl = file.download_url;
+                    querySelector.appendChild(option);
+                });
+            } catch (error) {
+                showError('Error loading queries: ' + error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Fetch query content
+        async function fetchQueryContent(fileName, downloadUrl) {
+            if (queriesCache.has(fileName)) {
+                return queriesCache.get(fileName);
+            }
+
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(downloadUrl);
+                if (!response.ok) throw new Error('Failed to fetch query content');
+                
+                const content = await response.text();
+                queriesCache.set(fileName, content);
+                return content;
+            } catch (error) {
+                showError('Error loading query content: ' + error.message);
+                return null;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Update query preview
+        querySelector.addEventListener('change', async () => {
+            const selectedOption = querySelector.selectedOptions[0];
+            if (selectedOption && selectedOption.value) {
+                const downloadUrl = selectedOption.dataset.downloadUrl;
+                const content = await fetchQueryContent(selectedOption.value, downloadUrl);
+                if (content) {
+                    queryPreview.textContent = content;
+                    runButton.disabled = false;
+                }
+            } else {
+                queryPreview.textContent = 'Select a query to preview its contents...';
+                runButton.disabled = true;
+            }
+        });
 
         // Handle run button click
         runButton.addEventListener('click', async () => {
