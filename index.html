@@ -152,7 +152,7 @@
         // Azure AD App Registration details
         const msalConfig = {
             auth: {
-                clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905", // Replace with your Azure AD App Registration Client ID
+                clientId: "YOUR_CLIENT_ID", // Replace with your Azure AD App Registration Client ID
                 authority: "https://login.microsoftonline.com/common",
                 redirectUri: window.location.origin,
             }
@@ -272,6 +272,9 @@
                     const option = document.createElement('option');
                     option.value = workspace.properties.customerId;
                     option.textContent = workspace.name;
+                    // Store additional workspace information
+                    option.dataset.resourceGroup = workspace.id.split('/')[4].toLowerCase(); // Extract resource group name
+                    option.dataset.workspaceName = workspace.name;
                     workspaceSelector.appendChild(option);
                 });
                 
@@ -374,11 +377,18 @@
             const selectedPortal = portalSelector.value;
             const encodedQuery = encodeURIComponent(content);
             
+            // Get subscription ID from subscription selector
+            const subscriptionId = subscriptionSelector.value;
+            
+            // Build the workspace resource ID
+            const workspaceResourceId = `/subscriptions/${subscriptionId}/resourcegroups/${workspaceSelector.selectedOptions[0].dataset.resourceGroup}/providers/microsoft.operationalinsights/workspaces/${workspaceSelector.selectedOptions[0].dataset.workspaceName}`;
+            const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
+
             let portalUrl;
             if (selectedPortal === 'loganalytics') {
-                portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${workspaceId}/query/${encodedQuery}`;
+                portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${encodedWorkspaceId}/query/${encodedQuery}/timespanInIsoFormat/P1D`;
             } else {
-                portalUrl = `https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/MainMenuBlade/7/initiator/AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${workspaceId}/query/${encodedQuery}`;
+                portalUrl = `https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/SecurityInsightsStudio/timeRange/%7B"relative"%3A%7B"duration"%3A24%2C"timeUnit"%3A1%7D%7D/query/${encodedQuery}/workspaceId/${workspaceId}`;
             }
             
             window.open(portalUrl, '_blank');
