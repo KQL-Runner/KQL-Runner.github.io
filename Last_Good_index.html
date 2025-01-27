@@ -367,16 +367,14 @@
             const workspaceId = workspaceSelector.value;
             const workspaceName = workspaceSelector.selectedOptions[0].textContent;
             const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
+            const encodedQuery = encodeURIComponent(content);
 
-            // Double encode special characters in the query
-            const doubleEncodedQuery = encodeURIComponent(encodeURIComponent(content));
+            // Construct the Sentinel resource path
+            const sentinelPath = `/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.securityinsightsarg/sentinel/${workspaceName}`;
+            const encodedPath = encodeURIComponent(sentinelPath);
 
-            // Construct and encode the resource ID
-            const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
-            const doubleEncodedResourceId = encodeURIComponent(encodeURIComponent(workspaceResourceId));
-
-            // Use exact Azure portal URL format
-            const portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${doubleEncodedResourceId}/query/${doubleEncodedQuery}`;
+            // Updated Sentinel URL format using MainMenuBlade
+            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/3/id/${encodedPath}?query=${encodedQuery}`;
             
             window.open(portalUrl, '_blank');
         });
