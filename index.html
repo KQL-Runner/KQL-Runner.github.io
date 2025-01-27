@@ -369,12 +369,12 @@
             const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
             const encodedQuery = encodeURIComponent(content);
 
-            // Construct the Sentinel resource path
-            const sentinelPath = `/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.securityinsightsarg/sentinel/${workspaceName}`;
-            const encodedPath = encodeURIComponent(sentinelPath);
+            // Construct the Log Analytics workspace resource ID
+            const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
+            const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
 
-            // Updated Sentinel URL format using MainMenuBlade and targeting Logs
-            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Logs/id/${encodedPath}/queryText/${encodedQuery}`;
+            // Updated URL format targeting the Logs blade directly
+            const portalUrl = `https://portal.azure.com/#blade/Microsoft_OperationsManagementSuite_Workspace/AnalyticsBlade/initiator/LogsBlade.AnalyticsShareLinkToQuery/isQueryEditorVisible/true/scope/${encodedWorkspaceId}/query/${encodedQuery}`;
             
             window.open(portalUrl, '_blank');
         });
