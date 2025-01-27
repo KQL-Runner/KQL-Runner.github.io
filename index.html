@@ -379,18 +379,19 @@
             
             // Get subscription ID from subscription selector
             const subscriptionId = subscriptionSelector.value;
+            const workspaceId = workspaceSelector.value;
             
             // Build the workspace resource ID
             const workspaceResourceId = `/subscriptions/${subscriptionId}/resourcegroups/${workspaceSelector.selectedOptions[0].dataset.resourceGroup}/providers/microsoft.operationalinsights/workspaces/${workspaceSelector.selectedOptions[0].dataset.workspaceName}`;
             const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
-            const workspaceId = workspaceSelector.value;
 
             let portalUrl;
             if (selectedPortal === 'loganalytics') {
-                portalUrl = `https://portal.azure.com/#@/blade/Microsoft_OperationsManagementSuite_Workspace/LogsBlade/source/LogsBlade.AnalyticsShareLinkToQuery/workspaceResourceId/${encodedWorkspaceId}/query/${encodedQuery}/timespan/P1D`;
+                // Simplified Log Analytics URL format
+                portalUrl = `https://portal.azure.com/#@/workspace/${encodedWorkspaceId}/logs?query=${encodedQuery}`;
             } else {
-                // For Sentinel, use the Hunting blade
-                portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/Hunting.ReactView/workspaceId/${workspaceId}/query/${encodedQuery}/timeRangeId/last24h`;
+                // Simplified Sentinel URL format
+                portalUrl = `https://portal.azure.com/#@/sentinel/hunting/${workspaceId}?query=${encodedQuery}`;
             }
             
             window.open(portalUrl, '_blank');
