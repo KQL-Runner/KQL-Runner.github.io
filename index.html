@@ -129,7 +129,7 @@
         // Azure AD App Registration configuration
         const msalConfig = {
             auth: {
-                clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905", // Replace with your Azure AD App Registration Client ID
+                clientId: "2ab668f3-12c0-4405-bd98-2c882fbde905",
                 authority: "https://login.microsoftonline.com/common",
                 redirectUri: window.location.origin,
             }
@@ -267,6 +267,7 @@
                     const option = document.createElement('option');
                     option.value = workspace.properties.customerId;
                     option.textContent = workspace.name;
+                    option.dataset.resourceGroup = workspace.id.split('/')[4].toLowerCase();
                     workspaceSelector.appendChild(option);
                 });
                 
@@ -365,14 +366,15 @@
             const subscriptionId = subscriptionSelector.value;
             const workspaceId = workspaceSelector.value;
             const workspaceName = workspaceSelector.selectedOptions[0].textContent;
+            const resourceGroup = workspaceSelector.selectedOptions[0].dataset.resourceGroup;
             const encodedQuery = encodeURIComponent(content);
 
-            // Construct the full workspace resource ID
-            const workspaceResourceId = `/subscriptions/${subscriptionId}/resourceGroups/${workspaceSelector.selectedOptions[0].dataset.resourceGroup}/providers/Microsoft.OperationalInsights/workspaces/${workspaceName}`;
-            const encodedWorkspaceId = encodeURIComponent(workspaceResourceId);
+            // Construct the Sentinel resource path
+            const sentinelPath = `/subscriptions/${subscriptionId}/resourcegroups/${resourceGroup}/providers/microsoft.securityinsightsarg/sentinel/${workspaceName}`;
+            const encodedPath = encodeURIComponent(sentinelPath);
 
-            // Updated Sentinel hunting URL format
-            const portalUrl = `https://portal.azure.com/#blade/Microsoft_Azure_Security_Insights/Hunting/view/query/${encodedQuery}/timeRange/P1D/workspaceId/${workspaceId}`;
+            // Updated Sentinel URL format using MainMenuBlade
+            const portalUrl = `https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/3/id/${encodedPath}?query=${encodedQuery}`;
             
             window.open(portalUrl, '_blank');
         });
